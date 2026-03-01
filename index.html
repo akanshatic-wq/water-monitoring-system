@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AquaSense - Water Monitoring</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
+      color: white;
+      text-align: center;
+    }
+
+    h1 {
+      margin-top: 20px;
+      font-size: 32px;
+    }
+
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 20px;
+      padding: 30px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      padding: 20px;
+      border-radius: 15px;
+      font-size: 20px;
+      transition: 0.3s;
+      box-shadow: 0 0 10px rgba(0,255,255,0.5);
+    }
+
+    .card:hover {
+      transform: scale(1.05);
+      box-shadow: 0 0 25px cyan;
+    }
+
+    .alert {
+      margin: 20px;
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .safe-alert {
+      background: #00c853;
+    }
+
+    .danger-alert {
+      background: #d50000;
+      animation: blink 1s infinite;
+    }
+
+    @keyframes blink {
+      50% { opacity: 0.6; }
+    }
+
+    canvas {
+      max-width: 300px;
+      margin: 20px auto;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      background: cyan;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin: 10px;
+    }
+
+    .btn:hover {
+      background: white;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>💧 AquaSense Water Monitoring</h1>
+
+<div id="alertBox" class="alert safe-alert">
+  Waiting for Data...
+</div>
+
+<div class="dashboard">
+  <div class="card">🌡 Temperature: <span id="temp">--</span> °C</div>
+  <div class="card">🧪 pH: <span id="ph">--</span></div>
+  <div class="card">💎 TDS: <span id="tds">--</span> ppm</div>
+  <div class="card">🌊 Turbidity: <span id="turbidity">--</span> NTU</div>
+</div>
+
+<canvas id="pieChart"></canvas>
+
+<button class="btn" onclick="window.location.href='analysis.html'">
+  📊 View Analysis
+</button>
+
+<!-- Alert Sound -->
+<audio id="alertSound" preload="auto">
+  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+</audio>
+
+<script type="module">
+
+// 🔹 Firebase Config (KEEP YOUR OWN CONFIG HERE)
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDj5OOnk-e5hRRPCOUnjARLSd1TnoaQIO8",
+  authDomain: "water-quality-monitor-7def2.firebaseapp.com",
+  databaseURL: "https://water-quality-monitor-7def2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "water-quality-monitor-7def2",
+  storageBucket: "water-quality-monitor-7def2.firebasestorage.app",
+  messagingSenderId: "565302773969",
+  appId: "1:565302773969:web:e49d47f796bfd7755dddf0",
+  measurementId: "G-SN578SE5M7"
+};
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const dataRef = ref(database, "sensorData");
+
+// 🔔 Notification Permission
+if ("Notification" in window) {
+  if (Notification.permission !== "granted") {
+    Notification.requestPermission();
+  }
+}
+
+let lastStatus = "SAFE";
+const alertBox = document.getElementById("alertBox");
+const alertSound = document.getElementById("alertSound");
+
+const ctx = document.getElementById('pieChart').getContext('2d');
+
+const pieChart = new Chart(ctx, {
+  type: 'pie',
+  data: {
+    labels: ['Safe Range', 'Outside Range'],
+    datasets: [{
+      data: [1, 0],
+      backgroundColor: ['#00e676', '#ff1744']
+    }]
+  }
+});
+
+onValue(dataRef, (snapshot) => {
+  const data = snapshot.val();
+
+  if (data) {
+
+    document.getElementById("temp").innerText = data.temperature;
+    document.getElementById("ph").innerText = data.ph;
+    document.getElementById("tds").innerText = data.tds;
+    document.getElementById("turbidity").innerText = data.turbidity;
+
+    const isSafe =
+      data.ph >= 6.5 && data.ph <= 8.5 &&
+      data.tds >= 50 && data.tds <= 300 &&
+      data.turbidity >= 0 && data.turbidity <= 5 &&
+      data.temperature >= 20 && data.temperature <= 35;
+
+    if (isSafe) {
+      alertBox.className = "alert safe-alert";
+      alertBox.innerHTML = "✅ Water Quality: SAFE";
+
+      pieChart.data.datasets[0].data = [1, 0];
+      pieChart.update();
+
+      lastStatus = "SAFE";
+
+    } else {
+      alertBox.className = "alert danger-alert";
+      alertBox.innerHTML = "⚠️ Water Quality: UNSAFE";
+
+      pieChart.data.datasets[0].data = [0, 1];
+      pieChart.update();
+
+      if (lastStatus === "SAFE") {
+
+        if (Notification.permission === "granted") {
+          new Notification("🚨 AquaSense Alert!", {
+            body: "Water quality is unsafe!"
+          });
+        }
+
+        alertSound.play();
+      }
+
+      lastStatus = "UNSAFE";
+    }
+  }
+});
+
+</script>
+
+</body>
+</html>
+	•	

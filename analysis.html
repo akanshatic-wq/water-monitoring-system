@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>AquaSense - Analysis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Poppins, sans-serif;
+      background: #1e2a38;
+      color: white;
+      text-align: center;
+    }
+
+    h1 {
+      padding: 20px;
+    }
+
+    a {
+      color: cyan;
+      text-decoration: none;
+      font-weight: bold;
+    }
+
+    canvas {
+      max-width: 900px;
+      margin: 40px auto;
+    }
+  </style>
+</head>
+
+<body>
+
+<h1>📊 Water Quality Analysis</h1>
+<a href="index.html">⬅ Back to Dashboard</a>
+
+<canvas id="tdsChart"></canvas>
+<canvas id="tempChart"></canvas>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
+/* 🔹 SAME FIREBASE CONFIG AS INDEX */
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  databaseURL: "YOUR_DATABASE_URL",
+  projectId: "YOUR_PROJECT_ID"
+};
+
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const dataRef = ref(database, 'data');
+
+const tdsChart = new Chart(document.getElementById("tdsChart"), {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: "TDS", data: [] }] }
+});
+
+const tempChart = new Chart(document.getElementById("tempChart"), {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: "Temperature", data: [] }] }
+});
+
+onValue(dataRef, (snapshot) => {
+  const data = snapshot.val();
+  if (!data) return;
+
+  const time = new Date().toLocaleTimeString();
+
+  tdsChart.data.labels.push(time);
+  tdsChart.data.datasets[0].data.push(data.tds);
+
+  tempChart.data.labels.push(time);
+  tempChart.data.datasets[0].data.push(data.temperature);
+
+  if (tdsChart.data.labels.length > 15) {
+    tdsChart.data.labels.shift();
+    tdsChart.data.datasets[0].data.shift();
+    tempChart.data.labels.shift();
+    tempChart.data.datasets[0].data.shift();
+  }
+
+  tdsChart.update();
+  tempChart.update();
+});
+</script>
+
+</body>
+</html>
