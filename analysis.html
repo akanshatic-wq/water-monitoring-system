@@ -72,23 +72,26 @@ const tempChart = new Chart(document.getElementById("tempChart"), {
 
 onValue(dataRef, (snapshot) => {
 
-  const data = snapshot.val();
-  if (!data) return;
+  const allData = snapshot.val();
+  if (!allData) return;
 
-  const time = new Date().toLocaleTimeString();
+  const entries = Object.values(allData);
 
-  tdsChart.data.labels.push(time);
-  tdsChart.data.datasets[0].data.push(data.tds);
+  tdsChart.data.labels = [];
+  tdsChart.data.datasets[0].data = [];
 
-  tempChart.data.labels.push(time);
-  tempChart.data.datasets[0].data.push(data.temperature);
+  tempChart.data.labels = [];
+  tempChart.data.datasets[0].data = [];
 
-  if (tdsChart.data.labels.length > 15) {
-    tdsChart.data.labels.shift();
-    tdsChart.data.datasets[0].data.shift();
-    tempChart.data.labels.shift();
-    tempChart.data.datasets[0].data.shift();
-  }
+  entries.slice(-15).forEach((entry) => {
+    const time = new Date().toLocaleTimeString();
+
+    tdsChart.data.labels.push(time);
+    tdsChart.data.datasets[0].data.push(entry.tds);
+
+    tempChart.data.labels.push(time);
+    tempChart.data.datasets[0].data.push(entry.temperature);
+  });
 
   tdsChart.update();
   tempChart.update();
