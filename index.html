@@ -95,10 +95,8 @@
 <div class="dashboard">
   <div class="card">🌡 Temperature: <span id="temp">--</span> °C</div>
   <div class="card">🧪 pH: <span id="ph">--</span></div>
-  <div class="card">💎 TDS: <span id="tds">--</span> ppm</div>
-  <div class="card">🌊 Turbidity: <span id="turbidity">--</span> NTU</div>
-</div>
-
+  <div class="card">🌊 TDS: <span id="tds">--</span> ppm</div>
+  
 <canvas id="pieChart"></canvas>
 
 <button class="btn" onclick="window.location.href='analysis.html'">
@@ -128,8 +126,7 @@ const firebaseConfig = {
 };
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const dataRef = ref(database, "sensorData");
-
+const dataRef = ref(database, "liveData");
 // 🔔 Notification Permission
 if ("Notification" in window) {
   if (Notification.permission !== "granted") {
@@ -156,50 +153,42 @@ const pieChart = new Chart(ctx, {
 
 onValue(dataRef, (snapshot) => {
   const data = snapshot.val();
+if (data) {
 
-  if (data) {
+  document.getElementById("temp").innerText = data.temperature;
+  document.getElementById("ph").innerText = data.ph;
+  document.getElementById("tds").innerText = data.tds;
 
-    document.getElementById("temp").innerText = data.temperature;
-    document.getElementById("ph").innerText = data.ph;
-    document.getElementById("tds").innerText = data.tds;
-    document.getElementById("turbidity").innerText = data.turbidity;
+  if (!data.danger) {
 
-    const isSafe =
-      data.ph >= 6.5 && data.ph <= 8.5 &&
-      data.tds >= 50 && data.tds <= 300 &&
-      data.turbidity >= 0 && data.turbidity <= 5 &&
-      data.temperature >= 20 && data.temperature <= 35;
+    alertBox.className = "alert safe-alert";
+    alertBox.innerHTML = "✅ Water Quality: SAFE";
 
-    if (isSafe) {
-      alertBox.className = "alert safe-alert";
-      alertBox.innerHTML = "✅ Water Quality: SAFE";
+    pieChart.data.datasets[0].data = [1, 0];
+    pieChart.update();
 
-      pieChart.data.datasets[0].data = [1, 0];
-      pieChart.update();
+    lastStatus = "SAFE";
 
-      lastStatus = "SAFE";
+  } else {
 
-    } else {
-      alertBox.className = "alert danger-alert";
-      alertBox.innerHTML = "⚠️ Water Quality: UNSAFE";
+    alertBox.className = "alert danger-alert";
+    alertBox.innerHTML = "⚠️ Water Quality: UNSAFE";
 
-      pieChart.data.datasets[0].data = [0, 1];
-      pieChart.update();
+    pieChart.data.datasets[0].data = [0, 1];
+    pieChart.update();
 
-      if (lastStatus === "SAFE") {
-
-        if (Notification.permission === "granted") {
-          new Notification("🚨 AquaSense Alert!", {
-            body: "Water quality is unsafe!"
-          });
-        }
-
-        alertSound.play();
+    if (lastStatus === "SAFE") {
+      if (Notification.permission === "granted") {
+        new Notification("🚨 AquaSense Alert!", {
+          body: "Water quality is unsafe!"
+        });
       }
-
-      lastStatus = "UNSAFE";
+      alertSound.play();
     }
+
+    lastStatus = "UNSAFE";
   }
+}
 });
 
 </script>
