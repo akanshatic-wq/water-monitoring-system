@@ -152,14 +152,23 @@ const pieChart = new Chart(ctx, {
 });
 
 onValue(dataRef, (snapshot) => {
-  const data = snapshot.val();
-if (data) {
+
+  const allData = snapshot.val();
+  if (!allData) return;
+
+  const entries = Object.values(allData);
+  const data = entries[entries.length - 1]; // latest reading
 
   document.getElementById("temp").innerText = data.temperature;
   document.getElementById("ph").innerText = data.ph;
   document.getElementById("tds").innerText = data.tds;
 
-  if (!data.danger) {
+  const isSafe =
+      data.ph >= 6.5 && data.ph <= 8.5 &&
+      data.tds >= 50 && data.tds <= 300 &&
+      data.temperature >= 20 && data.temperature <= 35;
+
+  if (isSafe) {
 
     alertBox.className = "alert safe-alert";
     alertBox.innerHTML = "✅ Water Quality: SAFE";
@@ -188,9 +197,8 @@ if (data) {
 
     lastStatus = "UNSAFE";
   }
-}
-});
 
+});
 </script>
 
 </body>
