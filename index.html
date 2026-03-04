@@ -150,7 +150,8 @@ const pieChart = new Chart(ctx, {
 
 // 🔹 Listen for live data
 onValue(dataRef, (snapshot) => {
-    const data = snapshot.val();   // THIS IS YOUR liveData OBJECT
+    const data = snapshot.val(); 
+	console.log(data);
     if (!data) return;
 
     // Update dashboard
