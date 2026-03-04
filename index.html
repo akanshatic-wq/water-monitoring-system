@@ -157,9 +157,7 @@ onValue(dataRef, (snapshot) => {
   const allData = snapshot.val();
   if (!allData) return;
 
-  const entries = Object.values(allData);
-  const data = entries[entries.length - 1]; // latest reading
-
+  
   document.getElementById("temp").innerText = data.temperature;
   document.getElementById("ph").innerText = data.ph;
   document.getElementById("tds").innerText = data.tds;
