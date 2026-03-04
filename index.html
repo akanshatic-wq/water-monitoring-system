@@ -154,15 +154,12 @@ const pieChart = new Chart(ctx, {
 
 onValue(dataRef, (snapshot) => {
 
-  const allData = snapshot.val();
-  if (!allData) return;
-const entries = Object.values(allData);
-  const latest = entries[entries.length - 1]; // get newest reading
+const data = snapshot.val();
+if (!data) return;
 
-  
-  document.getElementById("temp").innerText = data.temperature;
-  document.getElementById("ph").innerText = data.ph;
-  document.getElementById("tds").innerText = data.tds;
+document.getElementById("temp").innerText = data.temperature + " °C";
+document.getElementById("ph").innerText = data.ph;
+document.getElementById("tds").innerText = data.tds + " ppm";
 
   const isSafe =
       data.ph >= 6.5 && data.ph <= 8.5 &&
