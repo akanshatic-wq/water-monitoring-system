@@ -15,7 +15,6 @@
     }
     h1 { margin-top: 20px; font-size: 32px; }
 
-    /* ── Notification permission banner ── */
     #notifBanner {
       display: none;
       background: rgba(255,193,7,0.2);
@@ -38,7 +37,6 @@
       font-size: 13px;
     }
 
-    /* ── Alert box ── */
     .alert {
       margin: 16px 20px;
       padding: 15px;
@@ -50,7 +48,6 @@
     .danger-alert { background: #d50000; animation: blink 1s infinite; }
     @keyframes blink { 50% { opacity: 0.6; } }
 
-    /* ── Reason tags ── */
     .reason-tags {
       display: flex;
       justify-content: center;
@@ -58,16 +55,10 @@
       gap: 8px;
       margin: 0 20px 14px;
     }
-    .tag {
-      padding: 6px 14px;
-      border-radius: 20px;
-      font-size: 13px;
-      font-weight: 600;
-    }
+    .tag { padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; }
     .tag.bad  { background: rgba(213,0,0,0.4);  border: 1px solid #ff1744; }
     .tag.good { background: rgba(0,200,83,0.2);  border: 1px solid #00c853; }
 
-    /* ── Control panel ── */
     .alert-panel {
       background: rgba(255,255,255,0.08);
       border-radius: 15px;
@@ -79,11 +70,7 @@
       flex-wrap: wrap;
       gap: 12px;
     }
-    .panel-title {
-      font-size: 13px;
-      color: rgba(255,255,255,0.5);
-      width: 100%;
-    }
+    .panel-title { font-size: 13px; color: rgba(255,255,255,0.5); width: 100%; }
     .ctrl-btn {
       padding: 9px 20px;
       border-radius: 8px;
@@ -109,7 +96,6 @@
     }
     .countdown-box span { color: cyan; font-weight: 700; }
 
-    /* ── Dashboard cards ── */
     .dashboard {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -126,7 +112,6 @@
       box-shadow: 0 0 10px rgba(0,255,255,0.5);
     }
     .card:hover { transform: scale(1.05); box-shadow: 0 0 25px cyan; }
-
     canvas { max-width: 300px; margin: 16px auto; }
     .btn {
       padding: 10px 20px;
@@ -139,7 +124,6 @@
     }
     .btn:hover { background: white; }
 
-    /* ── Toast notification ── */
     #toast {
       position: fixed;
       bottom: 24px;
@@ -166,30 +150,24 @@
 
 <h1>💧 AquaSense Water Monitoring</h1>
 
-<!-- Notification permission banner -->
 <div id="notifBanner">
-  🔔 Enable browser notifications to get alerts even when this tab is in background.
-  <button onclick="requestNotifPermission()">Enable Notifications</button>
+  🔔 Get alerts on this device even when tab is closed.
+  <button onclick="subscribePush()">Enable Alerts</button>
 </div>
 
-<!-- Main alert -->
 <div id="alertBox" class="alert safe-alert">Waiting for Data...</div>
-
-<!-- Per-parameter reason tags -->
 <div class="reason-tags" id="reasonTags"></div>
 
-<!-- Control panel -->
 <div class="alert-panel">
   <div class="panel-title">🔔 Alert Controls</div>
-  <button class="ctrl-btn red"  id="buzzerBtn"  onclick="toggleBuzzer()">🔇 Mute Buzzer</button>
-  <button class="ctrl-btn blue" id="notifBtn"   onclick="toggleNotif()">🔕 Mute Notifications</button>
+  <button class="ctrl-btn red"  id="buzzerBtn" onclick="toggleBuzzer()">🔇 Mute Buzzer</button>
+  <button class="ctrl-btn blue" id="notifBtn"  onclick="toggleNotif()">🔕 Mute Notifications</button>
   <button class="ctrl-btn gray" onclick="testAlert()">🧪 Test Alert</button>
   <div class="countdown-box" id="countdownBox">
     Next alert in <span id="countdown">60</span>s
   </div>
 </div>
 
-<!-- Sensor cards -->
 <div class="dashboard">
   <div class="card">🌡 Temperature: <span id="temp">--</span></div>
   <div class="card">🧪 pH: <span id="ph">--</span></div>
@@ -199,8 +177,65 @@
 <canvas id="pieChart"></canvas>
 <button class="btn" onclick="window.location.href='analysis.html'">📊 View Analysis</button>
 
-<!-- In-page toast alert -->
 <div id="toast">🚨 Water Quality UNSAFE!</div>
+
+<!-- Service Worker registration + Push subscription -->
+<script>
+const VAPID_PUBLIC_KEY = 'BNmv-bTaiakWLNZEjCE_DHOhr5tW3JHPUSVqc42m2CT1u4EZUbrHwbNfLw0WerGrXvmv1FB2lzyMr_aAAcqeKcw';
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64  = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw     = atob(base64);
+  return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
+}
+
+async function subscribePush() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Push notifications not supported in this browser.');
+    return;
+  }
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    alert('Notification permission denied.');
+    return;
+  }
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+    });
+    // Save subscription to backend
+    const res = await fetch('/api/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sub)
+    });
+    if (res.ok) {
+      document.getElementById('notifBanner').style.display = 'none';
+      showToast('✅ Alerts enabled on this device!');
+    } else {
+      showToast('❌ Failed to save subscription.');
+    }
+  } catch (e) {
+    console.error('Push subscribe error:', e);
+    showToast('❌ Could not enable push: ' + e.message);
+  }
+}
+
+// Show banner if not yet subscribed
+async function checkPushStatus() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  const reg = await navigator.serviceWorker.register('/sw.js');
+  await navigator.serviceWorker.ready;
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) {
+    document.getElementById('notifBanner').style.display = 'block';
+  }
+}
+checkPushStatus();
+</script>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -222,17 +257,14 @@ const dataRef  = ref(database, "liveData");
 
 // ── Web Audio buzzer ─────────────────────────────────────────
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
 function playBuzzer() {
   if (buzzerMuted) return;
   audioCtx.resume().then(() => {
     [0, 0.35, 0.70].forEach(offset => {
       const osc  = audioCtx.createOscillator();
       const gain = audioCtx.createGain();
-      osc.connect(gain);
-      gain.connect(audioCtx.destination);
-      osc.type = 'square';
-      osc.frequency.value = 880;
+      osc.connect(gain); gain.connect(audioCtx.destination);
+      osc.type = 'square'; osc.frequency.value = 880;
       gain.gain.setValueAtTime(0.5, audioCtx.currentTime + offset);
       gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + offset + 0.28);
       osc.start(audioCtx.currentTime + offset);
@@ -241,95 +273,68 @@ function playBuzzer() {
   });
 }
 
-// ── Browser notification ─────────────────────────────────────
-function sendNotification(title, body) {
+// ── Local notification ───────────────────────────────────────
+function sendLocalNotif(title, body) {
   if (notifMuted) return;
   if (Notification.permission === 'granted') {
-    new Notification(title, {
-      body,
-      icon: 'https://cdn-icons-png.flaticon.com/512/2933/2933245.png',
-      badge: 'https://cdn-icons-png.flaticon.com/512/2933/2933245.png',
-      tag: 'aquasense-alert',   // replaces previous notification instead of stacking
-      renotify: true
-    });
+    new Notification(title, { body, tag: 'aquasense', renotify: true });
   }
 }
 
 // ── Toast ────────────────────────────────────────────────────
 let toastTimer;
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.style.display = 'block';
+window.showToast = function(msg, color) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = color || '#d50000';
+  t.style.display = 'block';
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4000);
-}
+  toastTimer = setTimeout(() => { t.style.display = 'none'; }, 4000);
+};
 
 // ── State ────────────────────────────────────────────────────
-let buzzerMuted    = false;
-let notifMuted     = false;
-let isUnsafe       = false;
-let lastStatus     = null;
-let countdownSecs  = 0;
-let countdownTimer = null;
+let buzzerMuted   = false;
+let notifMuted    = false;
+let isUnsafe      = false;
+let lastStatus    = null;
+let countdownSecs = 0;
+let countdownTimer;
 
-// ── Toggle controls ──────────────────────────────────────────
 window.toggleBuzzer = function() {
   buzzerMuted = !buzzerMuted;
-  const btn = document.getElementById('buzzerBtn');
-  btn.textContent = buzzerMuted ? '🔔 Unmute Buzzer' : '🔇 Mute Buzzer';
-  btn.className   = buzzerMuted ? 'ctrl-btn green'   : 'ctrl-btn red';
+  const b = document.getElementById('buzzerBtn');
+  b.textContent = buzzerMuted ? '🔔 Unmute Buzzer' : '🔇 Mute Buzzer';
+  b.className   = buzzerMuted ? 'ctrl-btn green'   : 'ctrl-btn red';
   if (!buzzerMuted && isUnsafe) playBuzzer();
 };
 
 window.toggleNotif = function() {
   notifMuted = !notifMuted;
-  const btn = document.getElementById('notifBtn');
-  btn.textContent = notifMuted ? '🔔 Unmute Notifications' : '🔕 Mute Notifications';
-  btn.className   = notifMuted ? 'ctrl-btn green'          : 'ctrl-btn blue';
+  const b = document.getElementById('notifBtn');
+  b.textContent = notifMuted ? '🔔 Unmute Notifications' : '🔕 Mute Notifications';
+  b.className   = notifMuted ? 'ctrl-btn green'          : 'ctrl-btn blue';
 };
 
 window.testAlert = function() {
   audioCtx.resume().then(() => {
-    buzzerMuted = false;
-    notifMuted  = false;
+    buzzerMuted = false; notifMuted = false;
     document.getElementById('buzzerBtn').textContent = '🔇 Mute Buzzer';
     document.getElementById('buzzerBtn').className   = 'ctrl-btn red';
     document.getElementById('notifBtn').textContent  = '🔕 Mute Notifications';
     document.getElementById('notifBtn').className    = 'ctrl-btn blue';
     playBuzzer();
-    sendNotification('🧪 AquaSense Test', 'Alert system is working!');
-    showToast('🧪 Test alert fired!');
+    sendLocalNotif('🧪 AquaSense Test', 'Alert system working!');
+    showToast('🧪 Test alert fired!', '#0288d1');
   });
 };
 
-// ── Notification permission ──────────────────────────────────
-window.requestNotifPermission = function() {
-  Notification.requestPermission().then(p => {
-    if (p === 'granted') {
-      document.getElementById('notifBanner').style.display = 'none';
-      showToast('✅ Notifications enabled!');
-    }
-  });
-};
-
-function checkNotifBanner() {
-  if (!('Notification' in window)) return;
-  if (Notification.permission === 'default') {
-    document.getElementById('notifBanner').style.display = 'block';
-  } else if (Notification.permission === 'granted') {
-    document.getElementById('notifBanner').style.display = 'none';
-  }
-}
-checkNotifBanner();
-
-// ── Countdown (repeat every 60s while unsafe) ────────────────
+// ── Countdown ────────────────────────────────────────────────
 function startCountdown() {
   clearInterval(countdownTimer);
   countdownSecs = 60;
   const box = document.getElementById('countdownBox');
   box.style.display = 'block';
-  document.getElementById('countdown').textContent = countdownSecs;
+  document.getElementById('countdown').textContent = 60;
 
   countdownTimer = setInterval(() => {
     countdownSecs--;
@@ -337,8 +342,14 @@ function startCountdown() {
     if (countdownSecs <= 0) {
       if (isUnsafe) {
         playBuzzer();
-        sendNotification('🚨 AquaSense Alert!', 'Water is still UNSAFE! Check your system.');
-        showToast('🚨 Water Quality still UNSAFE!');
+        sendLocalNotif('🚨 AquaSense', 'Water still UNSAFE!');
+        // Also trigger server-side push to ALL subscribers
+        fetch('/api/send-push', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: '🚨 AquaSense Alert!', body: 'Water is still UNSAFE! Check immediately.' })
+        });
+        showToast('🚨 Water still UNSAFE!');
         startCountdown();
       } else {
         clearInterval(countdownTimer);
@@ -357,13 +368,10 @@ function stopCountdown() {
 const ctx = document.getElementById('pieChart').getContext('2d');
 const pieChart = new Chart(ctx, {
   type: 'pie',
-  data: {
-    labels: ['Safe Range', 'Outside Range'],
-    datasets: [{ data: [1, 0], backgroundColor: ['#00e676', '#ff1744'] }]
-  }
+  data: { labels: ['Safe Range','Outside Range'], datasets: [{ data:[1,0], backgroundColor:['#00e676','#ff1744'] }] }
 });
 
-// ── Firebase listener ────────────────────────────────────────
+// ── Firebase ─────────────────────────────────────────────────
 const alertBox   = document.getElementById('alertBox');
 const reasonTags = document.getElementById('reasonTags');
 
@@ -371,7 +379,6 @@ onValue(dataRef, (snapshot) => {
   const raw = snapshot.val();
   if (!raw) return;
 
-  // Handle flat or nested push-key structure
   let data;
   if (raw.temperature !== undefined) {
     data = raw;
@@ -385,34 +392,32 @@ onValue(dataRef, (snapshot) => {
   document.getElementById('ph').innerText   = data.ph;
   document.getElementById('tds').innerText  = data.tds + ' ppm';
 
-  // Per-parameter checks
   const phOk   = data.ph          >= 6.5 && data.ph          <= 8.5;
   const tdsOk  = data.tds         >= 50  && data.tds         <= 300;
   const tempOk = data.temperature >= 20  && data.temperature <= 35;
-  const isSafeNow = phOk && tdsOk && tempOk;
+  const safe   = phOk && tdsOk && tempOk;
 
-  // Reason tags
   reasonTags.innerHTML = '';
   [
-    { label: `pH: ${data.ph}`,              ok: phOk   },
-    { label: `TDS: ${data.tds} ppm`,        ok: tdsOk  },
-    { label: `Temp: ${data.temperature}°C`, ok: tempOk },
+    { label: `pH: ${data.ph}`,               ok: phOk   },
+    { label: `TDS: ${data.tds} ppm`,         ok: tdsOk  },
+    { label: `Temp: ${data.temperature}°C`,  ok: tempOk },
   ].forEach(({ label, ok }) => {
     const t = document.createElement('span');
-    t.className   = 'tag ' + (ok ? 'good' : 'bad');
+    t.className = 'tag ' + (ok ? 'good' : 'bad');
     t.textContent = (ok ? '✅ ' : '⚠️ ') + label;
     reasonTags.appendChild(t);
   });
 
-  if (isSafeNow) {
+  if (safe) {
     alertBox.className   = 'alert safe-alert';
     alertBox.textContent = '✅ Water Quality: SAFE';
     pieChart.data.datasets[0].data = [1, 0];
     isUnsafe = false;
     stopCountdown();
     if (lastStatus === 'UNSAFE') {
-      showToast('✅ Water quality back to SAFE');
-      sendNotification('✅ AquaSense', 'Water quality is back to SAFE.');
+      showToast('✅ Water back to SAFE!', '#00c853');
+      sendLocalNotif('✅ AquaSense', 'Water quality is back to SAFE.');
     }
     lastStatus = 'SAFE';
   } else {
@@ -422,15 +427,26 @@ onValue(dataRef, (snapshot) => {
     isUnsafe = true;
 
     if (lastStatus !== 'UNSAFE') {
-      // First time becoming unsafe — fire immediately
-      playBuzzer();
       const reasons = [
         !phOk   ? `pH=${data.ph}`              : null,
         !tdsOk  ? `TDS=${data.tds}ppm`         : null,
         !tempOk ? `Temp=${data.temperature}°C` : null,
       ].filter(Boolean).join(', ');
-      sendNotification('🚨 AquaSense Alert!', `Water UNSAFE! ${reasons}`);
-      showToast(`🚨 UNSAFE! ${reasons}`);
+
+      playBuzzer();
+      sendLocalNotif('🚨 AquaSense Alert!', `Water UNSAFE! ${reasons}`);
+      showToast(`🚨 UNSAFE: ${reasons}`);
+
+      // Send push to ALL subscribers via Vercel function
+      fetch('/api/send-push', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: '🚨 AquaSense Alert!',
+          body: `Water quality UNSAFE! ${reasons}`
+        })
+      });
+
       startCountdown();
     }
     lastStatus = 'UNSAFE';
