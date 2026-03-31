@@ -1,197 +1,232 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>AquaSense - Water Monitoring</title>
+  <title>AquaSense - Analysis</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      margin: 0;
       font-family: 'Segoe UI', sans-serif;
       background: linear-gradient(135deg, #0f2027, #203a43, #2c5364);
       color: white;
+      min-height: 100vh;
+      padding: 20px;
       text-align: center;
     }
-    h1 { margin-top: 20px; font-size: 32px; }
-    .dashboard {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: 20px;
-      padding: 30px;
-    }
-    .card {
-      background: rgba(255,255,255,0.1);
-      backdrop-filter: blur(10px);
-      padding: 20px;
-      border-radius: 15px;
-      font-size: 20px;
-      transition: 0.3s;
-      box-shadow: 0 0 10px rgba(0,255,255,0.5);
-    }
-    .card:hover {
-      transform: scale(1.05);
-      box-shadow: 0 0 25px cyan;
-    }
-    .alert {
-      margin: 20px;
-      padding: 15px;
-      border-radius: 10px;
-      font-size: 20px;
+    h1 { padding: 20px; font-size: 28px; }
+    a {
+      color: cyan;
+      text-decoration: none;
       font-weight: bold;
+      display: inline-block;
+      margin-bottom: 20px;
     }
-    .safe-alert   { background: #00c853; }
-    .danger-alert { background: #d50000; animation: blink 1s infinite; }
-    @keyframes blink { 50% { opacity: 0.6; } }
-
-    /* debug box */
-    #debugBox {
-      background: rgba(0,0,0,0.4);
-      border: 1px solid rgba(255,255,0,0.3);
-      border-radius: 8px;
-      margin: 0 20px 10px;
-      padding: 10px 16px;
-      font-size: 12px;
-      color: #ffe082;
-      text-align: left;
-      font-family: monospace;
-      display: none;
-    }
-
-    canvas { max-width: 300px; margin: 20px auto; }
-    .btn {
+    #statusMsg {
+      margin: 10px auto;
       padding: 10px 20px;
-      background: cyan;
-      border: none;
       border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      margin: 10px;
+      font-size: 15px;
+      max-width: 500px;
+      background: rgba(255,255,255,0.1);
     }
-    .btn:hover { background: white; }
+    .chart-card {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 20px auto;
+      max-width: 900px;
+    }
+    .chart-card h2 {
+      font-size: 18px;
+      margin-bottom: 16px;
+      color: cyan;
+    }
+    .chart-wrap {
+      position: relative;
+      width: 100%;
+      height: 260px;
+    }
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin: 20px auto;
+      max-width: 900px;
+    }
+    .stat-card {
+      background: rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 14px;
+    }
+    .stat-card .label {
+      font-size: 12px;
+      color: rgba(255,255,255,0.6);
+      margin-bottom: 6px;
+    }
+    .stat-card .value {
+      font-size: 22px;
+      font-weight: 600;
+      color: cyan;
+    }
   </style>
 </head>
 <body>
 
-<h1>💧 AquaSense Water Monitoring</h1>
+<h1>📊 Water Quality Analysis</h1>
+<a href="index.html">⬅ Back to Dashboard</a>
 
-<div id="alertBox" class="alert safe-alert">Waiting for Data...</div>
+<div id="statusMsg">⏳ Loading data...</div>
 
-<!-- Debug box — shows raw Firebase data -->
-<div id="debugBox"></div>
-
-<div class="dashboard">
-  <div class="card">🌡 Temperature: <span id="temp">--</span></div>
-  <div class="card">🧪 pH: <span id="ph">--</span></div>
-  <div class="card">🌊 TDS: <span id="tds">--</span></div>
+<!-- Live stats summary -->
+<div class="stats-grid">
+  <div class="stat-card"><div class="label">Latest Temp</div><div class="value" id="statTemp">--</div></div>
+  <div class="stat-card"><div class="label">Latest pH</div><div class="value" id="statPh">--</div></div>
+  <div class="stat-card"><div class="label">Latest TDS</div><div class="value" id="statTds">--</div></div>
+  <div class="stat-card"><div class="label">Readings</div><div class="value" id="statCount">--</div></div>
 </div>
 
-<canvas id="pieChart"></canvas>
+<!-- TDS Chart -->
+<div class="chart-card">
+  <h2>🌊 TDS (ppm)</h2>
+  <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
+</div>
 
-<button class="btn" onclick="window.location.href='analysis.html'">📊 View Analysis</button>
+<!-- Temperature Chart -->
+<div class="chart-card">
+  <h2>🌡 Temperature (°C)</h2>
+  <div class="chart-wrap"><canvas id="tempChart"></canvas></div>
+</div>
 
-<audio id="alertSound" preload="auto">
-  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
-</audio>
+<!-- pH Chart -->
+<div class="chart-card">
+  <h2>🧪 pH Level</h2>
+  <div class="chart-wrap"><canvas id="phChart"></canvas></div>
+</div>
 
 <script type="module">
-import { initializeApp }        from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
-  apiKey:            "AIzaSyDj5OOnk-e5hRRPCOUnjARLSd1TnoaQIO8",
-  authDomain:        "water-quality-monitor-7def2.firebaseapp.com",
-  databaseURL:       "https://water-quality-monitor-7def2-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId:         "water-quality-monitor-7def2",
-  storageBucket:     "water-quality-monitor-7def2.firebasestorage.app",
+  apiKey: "AIzaSyDj5OOnk-e5hRRPCOUnjARLSd1TnoaQIO8",
+  authDomain: "water-quality-monitor-7def2.firebaseapp.com",
+  databaseURL: "https://water-quality-monitor-7def2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "water-quality-monitor-7def2",
+  storageBucket: "water-quality-monitor-7def2.firebasestorage.app",
   messagingSenderId: "565302773969",
-  appId:             "1:565302773969:web:e49d47f796bfd7755dddf0",
-  measurementId:     "G-SN578SE5M7"
+  appId: "1:565302773969:web:e49d47f796bfd7755dddf0"
 };
 
 const app      = initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const dataRef  = ref(database, "liveData");
 
-if ("Notification" in window && Notification.permission !== "granted") {
-  Notification.requestPermission();
+// ── Chart factory ──────────────────────────────────────────
+function makeChart(id, label, color) {
+  return new Chart(document.getElementById(id), {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label,
+        data: [],
+        borderColor: color,
+        backgroundColor: color + '22',
+        fill: true,
+        tension: 0.4,
+        pointRadius: 3,
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: 'white' } } },
+      scales: {
+        x: { ticks: { color: 'rgba(255,255,255,0.6)', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: 'rgba(255,255,255,0.6)' },               grid: { color: 'rgba(255,255,255,0.1)' } }
+      }
+    }
+  });
 }
 
-let lastStatus = "SAFE";
-const alertBox   = document.getElementById("alertBox");
-const alertSound = document.getElementById("alertSound");
-const debugBox   = document.getElementById("debugBox");
+const tdsChart  = makeChart('tdsChart',  'TDS (ppm)',        '#00e5ff');
+const tempChart = makeChart('tempChart', 'Temperature (°C)', '#ff6d00');
+const phChart   = makeChart('phChart',   'pH',               '#00e676');
 
-// Pie chart
-const ctx = document.getElementById('pieChart').getContext('2d');
-const pieChart = new Chart(ctx, {
-  type: 'pie',
-  data: {
-    labels: ['Safe Range', 'Outside Range'],
-    datasets: [{ data: [1, 0], backgroundColor: ['#00e676', '#ff1744'] }]
+// ── Render helper ──────────────────────────────────────────
+function renderCharts(entries) {
+  const last15 = entries.slice(-15);
+
+  // Clear
+  [tdsChart, tempChart, phChart].forEach(c => {
+    c.data.labels = [];
+    c.data.datasets[0].data = [];
+  });
+
+  last15.forEach((entry, i) => {
+    const label = entry.ts
+      ? new Date(entry.ts).toLocaleTimeString()
+      : '#' + (i + 1);
+
+    tdsChart.data.labels.push(label);
+    tdsChart.data.datasets[0].data.push(entry.tds ?? null);
+
+    tempChart.data.labels.push(label);
+    tempChart.data.datasets[0].data.push(entry.temperature ?? null);
+
+    phChart.data.labels.push(label);
+    phChart.data.datasets[0].data.push(entry.ph ?? null);
+  });
+
+  [tdsChart, tempChart, phChart].forEach(c => c.update());
+
+  // Update stat cards with latest entry
+  const latest = last15[last15.length - 1];
+  if (latest) {
+    document.getElementById('statTemp').textContent  = (latest.temperature ?? '--') + ' °C';
+    document.getElementById('statPh').textContent    = latest.ph ?? '--';
+    document.getElementById('statTds').textContent   = (latest.tds ?? '--') + ' ppm';
+    document.getElementById('statCount').textContent = entries.length;
   }
-});
+}
 
-// Listen for live data
-onValue(dataRef, (snapshot) => {
-  const raw = snapshot.val();
-  console.log("Firebase raw data:", raw);
+// ── Try /history first, fallback to /liveData ──────────────
+const historyRef  = ref(database, 'history');
+const liveDataRef = ref(database, 'liveData');
+const statusMsg   = document.getElementById('statusMsg');
 
-  // ── Show debug box so we can see exact field names ──
-  debugBox.style.display = 'block';
-  debugBox.textContent   = '🔍 Raw Firebase data: ' + JSON.stringify(raw);
+onValue(historyRef, (snapshot) => {
+  const allData = snapshot.val();
 
-  if (!raw) {
-    alertBox.className   = 'alert safe-alert';
-    alertBox.textContent = '⚠️ No data in Firebase yet. Is ESP32 running?';
-    return;
-  }
-
-  // ── Flexible field reading: handles temperature / temp, ph / pH, tds / TDS ──
-  const tempVal = raw.temperature ?? raw.temp  ?? raw.Temperature ?? null;
-  const phVal   = raw.ph          ?? raw.pH    ?? raw.PH          ?? null;
-  const tdsVal  = raw.tds         ?? raw.TDS   ?? raw.Tds         ?? null;
-
-  // Update cards
-  document.getElementById("temp").innerText = tempVal !== null ? tempVal + " °C"  : "No data";
-  document.getElementById("ph").innerText   = phVal   !== null ? phVal            : "No data";
-  document.getElementById("tds").innerText  = tdsVal  !== null ? tdsVal + " ppm"  : "No data";
-
-  // Safety check — only if we have all 3 values
-  if (tempVal === null || phVal === null || tdsVal === null) {
-    alertBox.className   = 'alert danger-alert';
-    alertBox.textContent = '⚠️ Partial data received — check field names in Serial Monitor';
-    return;
-  }
-
-  const isSafe =
-    phVal   >= 6.5 && phVal   <= 8.5  &&
-    tdsVal  >= 50  && tdsVal  <= 300  &&
-    tempVal >= 20  && tempVal <= 35;
-
-  if (isSafe) {
-    alertBox.className   = 'alert safe-alert';
-    alertBox.textContent = '✅ Water Quality: SAFE';
-    pieChart.data.datasets[0].data = [1, 0];
-    pieChart.update();
-    lastStatus = "SAFE";
-  } else {
-    alertBox.className   = 'alert danger-alert';
-    alertBox.textContent = '⚠️ Water Quality: UNSAFE';
-    pieChart.data.datasets[0].data = [0, 1];
-    pieChart.update();
-
-    if (lastStatus === "SAFE" && Notification.permission === "granted") {
-      new Notification("🚨 AquaSense Alert!", { body: "Water quality is unsafe!" });
-      alertSound.play().catch(() => {});
+  if (allData && typeof allData === 'object') {
+    // history has entries — use them
+    const entries = Object.values(allData);
+    if (entries.length > 0) {
+      statusMsg.textContent = '✅ Showing history (' + entries.length + ' readings)';
+      statusMsg.style.background = 'rgba(0,200,83,0.2)';
+      renderCharts(entries);
+      return;
     }
-    lastStatus = "UNSAFE";
   }
+
+  // history is empty — fallback to liveData single reading
+  statusMsg.textContent = '⚠️ No history yet — showing live snapshot. Keep ESP32 running to build history.';
+  statusMsg.style.background = 'rgba(255,160,0,0.2)';
+
+  onValue(liveDataRef, (snap) => {
+    const live = snap.val();
+    if (!live || typeof live !== 'object' || !live.temperature) {
+      statusMsg.textContent = '❌ No data found. Make sure ESP32 is running and sending data.';
+      statusMsg.style.background = 'rgba(213,0,0,0.2)';
+      return;
+    }
+    renderCharts([live]);
+  }, { onlyOnce: true });
 
 }, (error) => {
-  debugBox.style.display = 'block';
-  debugBox.textContent   = '❌ Firebase error: ' + error.message;
-  alertBox.className     = 'alert danger-alert';
-  alertBox.textContent   = '❌ Firebase connection error';
+  statusMsg.textContent = '❌ Firebase error: ' + error.message;
+  statusMsg.style.background = 'rgba(213,0,0,0.2)';
 });
 </script>
 </body>
