@@ -208,7 +208,8 @@ onValue(dataRef, (snapshot) => {
     phs.push(data.ph);
     tdss.push(data.tds);
 
-    chart.data.labels.push(index);
+    const time = new Date(data.timestamp || Date.now()).toLocaleTimeString();
+chart.data.labels.push(time);
     chart.data.datasets[0].data.push(data.temperature);
     chart.data.datasets[1].data.push(data.ph);
     chart.data.datasets[2].data.push(data.tds);
