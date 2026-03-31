@@ -12,7 +12,7 @@
     { "src": "/",                 "dest": "/index.html" },
     { "src": "/analysis",         "dest": "/analysis.html" },
     { "src": "/analysis.html",    "dest": "/analysis.html" },
-
+    { "src": "/advanced-analysis", "dest": "/advanced-analysis.html" }
     { "src": "/(.*)",             "dest": "/index.html" }
   ]
 }
