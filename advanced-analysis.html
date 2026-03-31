@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Advanced Water Analysis</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background: #0f2027;
+      color: white;
+      text-align: center;
+    }
+
+    h1 { margin: 20px; }
+
+    .stats {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .card {
+      background: rgba(255,255,255,0.1);
+      padding: 15px 25px;
+      border-radius: 12px;
+      font-size: 18px;
+    }
+
+    canvas {
+      max-width: 90%;
+      margin: 20px auto;
+    }
+
+    .btn {
+      padding: 10px 20px;
+      background: cyan;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin: 20px;
+    }
+  </style>
+</head>
+<body>
+
+<h1>📊 Advanced Water Analysis</h1>
+
+<div class="stats">
+  <div class="card">Avg Temp: <span id="avgTemp">--</span></div>
+  <div class="card">Avg pH: <span id="avgPh">--</span></div>
+  <div class="card">Avg TDS: <span id="avgTds">--</span></div>
+  <div class="card">Safe %: <span id="safePercent">--</span></div>
+</div>
+
+<canvas id="trendChart"></canvas>
+
+<button class="btn" onclick="window.location.href='index.html'">⬅ Back</button>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSy...",
+  authDomain: "water-quality-monitor-7def2.firebaseapp.com",
+  databaseURL: "https://water-quality-monitor-7def2-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "water-quality-monitor-7def2",
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+const dataRef = ref(db, "liveData");
+
+let temps = [], phs = [], tdss = [], safeCount = 0;
+
+const ctx = document.getElementById('trendChart').getContext('2d');
+const chart = new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label: 'Temp', data: [] },
+      { label: 'pH', data: [] },
+      { label: 'TDS', data: [] }
+    ]
+  }
+});
+
+onValue(dataRef, (snapshot) => {
+  const raw = snapshot.val();
+  if (!raw) return;
+
+  const entries = Object.values(raw);
+
+  temps = [];
+  phs = [];
+  tdss = [];
+  safeCount = 0;
+
+  chart.data.labels = [];
+  chart.data.datasets.forEach(ds => ds.data = []);
+
+  entries.forEach((data, index) => {
+    temps.push(data.temperature);
+    phs.push(data.ph);
+    tdss.push(data.tds);
+
+    chart.data.labels.push(index);
+    chart.data.datasets[0].data.push(data.temperature);
+    chart.data.datasets[1].data.push(data.ph);
+    chart.data.datasets[2].data.push(data.tds);
+
+    const safe =
+      data.ph >= 6.5 && data.ph <= 8.5 &&
+      data.tds >= 50 && data.tds <= 300 &&
+      data.temperature >= 20 && data.temperature <= 35;
+
+    if (safe) safeCount++;
+  });
+
+  const avg = arr => (arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(2);
+
+  document.getElementById('avgTemp').innerText = avg(temps) + " °C";
+  document.getElementById('avgPh').innerText   = avg(phs);
+  document.getElementById('avgTds').innerText  = avg(tdss) + " ppm";
+
+  const safePercent = ((safeCount / entries.length) * 100).toFixed(1);
+  document.getElementById('safePercent').innerText = safePercent + "%";
+
+  chart.update();
+});
+</script>
+
+</body>
+</html>
