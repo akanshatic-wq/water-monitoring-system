@@ -23,35 +23,18 @@
       margin-bottom: 20px;
     }
     #statusMsg {
-      margin: 10px auto;
+      margin: 10px auto 20px;
       padding: 10px 20px;
       border-radius: 8px;
-      font-size: 15px;
-      max-width: 500px;
+      font-size: 14px;
+      max-width: 600px;
       background: rgba(255,255,255,0.1);
-    }
-    .chart-card {
-      background: rgba(255,255,255,0.08);
-      border-radius: 16px;
-      padding: 20px;
-      margin: 20px auto;
-      max-width: 900px;
-    }
-    .chart-card h2 {
-      font-size: 18px;
-      margin-bottom: 16px;
-      color: cyan;
-    }
-    .chart-wrap {
-      position: relative;
-      width: 100%;
-      height: 260px;
     }
     .stats-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 12px;
-      margin: 20px auto;
+      margin: 0 auto 24px;
       max-width: 900px;
     }
     .stat-card {
@@ -59,16 +42,17 @@
       border-radius: 12px;
       padding: 14px;
     }
-    .stat-card .label {
-      font-size: 12px;
-      color: rgba(255,255,255,0.6);
-      margin-bottom: 6px;
+    .stat-card .label { font-size: 12px; color: rgba(255,255,255,0.6); margin-bottom: 6px; }
+    .stat-card .value { font-size: 22px; font-weight: 600; color: cyan; }
+    .chart-card {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 16px auto;
+      max-width: 900px;
     }
-    .stat-card .value {
-      font-size: 22px;
-      font-weight: 600;
-      color: cyan;
-    }
+    .chart-card h2 { font-size: 18px; margin-bottom: 16px; color: cyan; }
+    .chart-wrap { position: relative; width: 100%; height: 240px; }
   </style>
 </head>
 <body>
@@ -78,30 +62,26 @@
 
 <div id="statusMsg">⏳ Loading data...</div>
 
-<!-- Live stats summary -->
 <div class="stats-grid">
   <div class="stat-card"><div class="label">Latest Temp</div><div class="value" id="statTemp">--</div></div>
   <div class="stat-card"><div class="label">Latest pH</div><div class="value" id="statPh">--</div></div>
   <div class="stat-card"><div class="label">Latest TDS</div><div class="value" id="statTds">--</div></div>
-  <div class="stat-card"><div class="label">Readings</div><div class="value" id="statCount">--</div></div>
+  <div class="stat-card"><div class="label">Total Readings</div><div class="value" id="statCount">--</div></div>
 </div>
 
-<!-- TDS Chart -->
-<div class="chart-card">
-  <h2>🌊 TDS (ppm)</h2>
-  <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
-</div>
-
-<!-- Temperature Chart -->
 <div class="chart-card">
   <h2>🌡 Temperature (°C)</h2>
   <div class="chart-wrap"><canvas id="tempChart"></canvas></div>
 </div>
 
-<!-- pH Chart -->
 <div class="chart-card">
   <h2>🧪 pH Level</h2>
   <div class="chart-wrap"><canvas id="phChart"></canvas></div>
+</div>
+
+<div class="chart-card">
+  <h2>🌊 TDS (ppm)</h2>
+  <div class="chart-wrap"><canvas id="tdsChart"></canvas></div>
 </div>
 
 <script type="module">
@@ -120,8 +100,8 @@ const firebaseConfig = {
 
 const app      = initializeApp(firebaseConfig);
 const database = getDatabase(app);
+const statusMsg = document.getElementById('statusMsg');
 
-// ── Chart factory ──────────────────────────────────────────
 function makeChart(id, label, color) {
   return new Chart(document.getElementById(id), {
     type: 'line',
@@ -134,7 +114,7 @@ function makeChart(id, label, color) {
         backgroundColor: color + '22',
         fill: true,
         tension: 0.4,
-        pointRadius: 3,
+        pointRadius: 2,
         borderWidth: 2
       }]
     },
@@ -143,91 +123,90 @@ function makeChart(id, label, color) {
       maintainAspectRatio: false,
       plugins: { legend: { labels: { color: 'white' } } },
       scales: {
-        x: { ticks: { color: 'rgba(255,255,255,0.6)', maxRotation: 45 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: 'rgba(255,255,255,0.6)' },               grid: { color: 'rgba(255,255,255,0.1)' } }
+        x: { ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: { ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } }
       }
     }
   });
 }
 
-const tdsChart  = makeChart('tdsChart',  'TDS (ppm)',        '#00e5ff');
 const tempChart = makeChart('tempChart', 'Temperature (°C)', '#ff6d00');
 const phChart   = makeChart('phChart',   'pH',               '#00e676');
+const tdsChart  = makeChart('tdsChart',  'TDS (ppm)',        '#00e5ff');
 
-// ── Render helper ──────────────────────────────────────────
 function renderCharts(entries) {
-  const last15 = entries.slice(-15);
+  const last30 = entries.slice(-30); // show last 30 readings
 
-  // Clear
-  [tdsChart, tempChart, phChart].forEach(c => {
+  [tempChart, phChart, tdsChart].forEach(c => {
     c.data.labels = [];
     c.data.datasets[0].data = [];
   });
 
-  last15.forEach((entry, i) => {
-    const label = entry.ts
-      ? new Date(entry.ts).toLocaleTimeString()
-      : '#' + (i + 1);
-
-    tdsChart.data.labels.push(label);
-    tdsChart.data.datasets[0].data.push(entry.tds ?? null);
-
+  last30.forEach((entry, i) => {
+    const label = '#' + (entries.length - last30.length + i + 1);
     tempChart.data.labels.push(label);
     tempChart.data.datasets[0].data.push(entry.temperature ?? null);
-
     phChart.data.labels.push(label);
     phChart.data.datasets[0].data.push(entry.ph ?? null);
+    tdsChart.data.labels.push(label);
+    tdsChart.data.datasets[0].data.push(entry.tds ?? null);
   });
 
-  [tdsChart, tempChart, phChart].forEach(c => c.update());
+  [tempChart, phChart, tdsChart].forEach(c => c.update());
 
-  // Update stat cards with latest entry
-  const latest = last15[last15.length - 1];
+  const latest = last30[last30.length - 1];
   if (latest) {
     document.getElementById('statTemp').textContent  = (latest.temperature ?? '--') + ' °C';
-    document.getElementById('statPh').textContent    = latest.ph ?? '--';
-    document.getElementById('statTds').textContent   = (latest.tds ?? '--') + ' ppm';
-    document.getElementById('statCount').textContent = entries.length;
+    document.getElementById('statPh').textContent    =  latest.ph          ?? '--';
+    document.getElementById('statTds').textContent   = (latest.tds         ?? '--') + ' ppm';
+    document.getElementById('statCount').textContent =  entries.length;
   }
 }
 
-// ── Try /history first, fallback to /liveData ──────────────
+// ── Try /history first ──────────────────────────────────────
 const historyRef  = ref(database, 'history');
 const liveDataRef = ref(database, 'liveData');
-const statusMsg   = document.getElementById('statusMsg');
 
 onValue(historyRef, (snapshot) => {
-  const allData = snapshot.val();
+  const histData = snapshot.val();
 
-  if (allData && typeof allData === 'object') {
-    // history has entries — use them
-    const entries = Object.values(allData);
-    if (entries.length > 0) {
-      statusMsg.textContent = '✅ Showing history (' + entries.length + ' readings)';
+  if (histData && typeof histData === 'object') {
+    const entries = Object.values(histData);
+    if (entries.length > 0 && entries[0].temperature !== undefined) {
+      statusMsg.textContent = '✅ History data — ' + entries.length + ' readings';
       statusMsg.style.background = 'rgba(0,200,83,0.2)';
       renderCharts(entries);
       return;
     }
   }
 
-  // history is empty — fallback to liveData single reading
-  statusMsg.textContent = '⚠️ No history yet — showing live snapshot. Keep ESP32 running to build history.';
-  statusMsg.style.background = 'rgba(255,160,0,0.2)';
-
+  // ── Fallback: use liveData push keys as history ─────────────
+  // Your ESP32 was POSTing to liveData, so all history is there!
   onValue(liveDataRef, (snap) => {
-    const live = snap.val();
-    if (!live || typeof live !== 'object' || !live.temperature) {
-      statusMsg.textContent = '❌ No data found. Make sure ESP32 is running and sending data.';
+    const raw = snap.val();
+    if (!raw) {
+      statusMsg.textContent = '❌ No data found. Make sure ESP32 is running.';
       statusMsg.style.background = 'rgba(213,0,0,0.2)';
       return;
     }
-    renderCharts([live]);
+
+    // Check if liveData has push-key history entries
+    const firstVal = Object.values(raw)[0];
+    if (typeof firstVal === 'object' && firstVal.temperature !== undefined) {
+      // liveData contains history (push keys) — use it!
+      const entries = Object.values(raw);
+      statusMsg.textContent = '📦 Using liveData history — ' + entries.length + ' readings (move ESP32 to POST /history for future)';
+      statusMsg.style.background = 'rgba(255,160,0,0.2)';
+      renderCharts(entries);
+    } else if (raw.temperature !== undefined) {
+      // liveData is flat — only 1 reading available
+      statusMsg.textContent = '⚠️ Only 1 live reading available. History will build up over time.';
+      statusMsg.style.background = 'rgba(255,160,0,0.2)';
+      renderCharts([raw]);
+    }
   }, { onlyOnce: true });
 
-}, (error) => {
-  statusMsg.textContent = '❌ Firebase error: ' + error.message;
-  statusMsg.style.background = 'rgba(213,0,0,0.2)';
-});
+}, { onlyOnce: true });
 </script>
 </body>
 </html>
