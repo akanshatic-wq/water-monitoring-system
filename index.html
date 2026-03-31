@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    * { box-sizing: border-box; }
     body {
       margin: 0;
       font-family: 'Segoe UI', sans-serif;
@@ -13,11 +14,107 @@
       text-align: center;
     }
     h1 { margin-top: 20px; font-size: 32px; }
+
+    /* ── Notification permission banner ── */
+    #notifBanner {
+      display: none;
+      background: rgba(255,193,7,0.2);
+      border: 1px solid rgba(255,193,7,0.5);
+      border-radius: 10px;
+      margin: 0 20px 10px;
+      padding: 12px 16px;
+      font-size: 14px;
+      color: #ffe082;
+    }
+    #notifBanner button {
+      margin-left: 12px;
+      padding: 6px 16px;
+      background: #ffc107;
+      color: #000;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px;
+    }
+
+    /* ── Alert box ── */
+    .alert {
+      margin: 16px 20px;
+      padding: 15px;
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: bold;
+    }
+    .safe-alert   { background: #00c853; }
+    .danger-alert { background: #d50000; animation: blink 1s infinite; }
+    @keyframes blink { 50% { opacity: 0.6; } }
+
+    /* ── Reason tags ── */
+    .reason-tags {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 20px 14px;
+    }
+    .tag {
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .tag.bad  { background: rgba(213,0,0,0.4);  border: 1px solid #ff1744; }
+    .tag.good { background: rgba(0,200,83,0.2);  border: 1px solid #00c853; }
+
+    /* ── Control panel ── */
+    .alert-panel {
+      background: rgba(255,255,255,0.08);
+      border-radius: 15px;
+      margin: 0 20px 16px;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .panel-title {
+      font-size: 13px;
+      color: rgba(255,255,255,0.5);
+      width: 100%;
+    }
+    .ctrl-btn {
+      padding: 9px 20px;
+      border-radius: 8px;
+      border: none;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.2s;
+    }
+    .ctrl-btn:hover { opacity: 0.85; transform: scale(1.03); }
+    .ctrl-btn.red   { background: #ff1744; color: white; }
+    .ctrl-btn.green { background: #00c853; color: white; }
+    .ctrl-btn.blue  { background: #0288d1; color: white; }
+    .ctrl-btn.gray  { background: rgba(255,255,255,0.2); color: white; }
+
+    .countdown-box {
+      font-size: 13px;
+      color: rgba(255,255,255,0.7);
+      background: rgba(0,0,0,0.3);
+      padding: 8px 16px;
+      border-radius: 8px;
+      display: none;
+    }
+    .countdown-box span { color: cyan; font-weight: 700; }
+
+    /* ── Dashboard cards ── */
     .dashboard {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
       gap: 20px;
-      padding: 30px;
+      padding: 20px 30px;
     }
     .card {
       background: rgba(255,255,255,0.1);
@@ -29,17 +126,8 @@
       box-shadow: 0 0 10px rgba(0,255,255,0.5);
     }
     .card:hover { transform: scale(1.05); box-shadow: 0 0 25px cyan; }
-    .alert {
-      margin: 20px;
-      padding: 15px;
-      border-radius: 10px;
-      font-size: 20px;
-      font-weight: bold;
-    }
-    .safe-alert   { background: #00c853; }
-    .danger-alert { background: #d50000; animation: blink 1s infinite; }
-    @keyframes blink { 50% { opacity: 0.6; } }
-    canvas { max-width: 300px; margin: 20px auto; }
+
+    canvas { max-width: 300px; margin: 16px auto; }
     .btn {
       padding: 10px 20px;
       background: cyan;
@@ -50,13 +138,58 @@
       margin: 10px;
     }
     .btn:hover { background: white; }
+
+    /* ── Toast notification ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #d50000;
+      color: white;
+      padding: 14px 28px;
+      border-radius: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      display: none;
+      z-index: 999;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+      animation: slideUp 0.3s ease;
+    }
+    @keyframes slideUp {
+      from { bottom: 0; opacity: 0; }
+      to   { bottom: 24px; opacity: 1; }
+    }
   </style>
 </head>
 <body>
 
 <h1>💧 AquaSense Water Monitoring</h1>
+
+<!-- Notification permission banner -->
+<div id="notifBanner">
+  🔔 Enable browser notifications to get alerts even when this tab is in background.
+  <button onclick="requestNotifPermission()">Enable Notifications</button>
+</div>
+
+<!-- Main alert -->
 <div id="alertBox" class="alert safe-alert">Waiting for Data...</div>
 
+<!-- Per-parameter reason tags -->
+<div class="reason-tags" id="reasonTags"></div>
+
+<!-- Control panel -->
+<div class="alert-panel">
+  <div class="panel-title">🔔 Alert Controls</div>
+  <button class="ctrl-btn red"  id="buzzerBtn"  onclick="toggleBuzzer()">🔇 Mute Buzzer</button>
+  <button class="ctrl-btn blue" id="notifBtn"   onclick="toggleNotif()">🔕 Mute Notifications</button>
+  <button class="ctrl-btn gray" onclick="testAlert()">🧪 Test Alert</button>
+  <div class="countdown-box" id="countdownBox">
+    Next alert in <span id="countdown">60</span>s
+  </div>
+</div>
+
+<!-- Sensor cards -->
 <div class="dashboard">
   <div class="card">🌡 Temperature: <span id="temp">--</span></div>
   <div class="card">🧪 pH: <span id="ph">--</span></div>
@@ -66,9 +199,8 @@
 <canvas id="pieChart"></canvas>
 <button class="btn" onclick="window.location.href='analysis.html'">📊 View Analysis</button>
 
-<audio id="alertSound" preload="auto">
-  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
-</audio>
+<!-- In-page toast alert -->
+<div id="toast">🚨 Water Quality UNSAFE!</div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -88,14 +220,140 @@ const app      = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const dataRef  = ref(database, "liveData");
 
-if ("Notification" in window && Notification.permission !== "granted") {
-  Notification.requestPermission();
+// ── Web Audio buzzer ─────────────────────────────────────────
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+function playBuzzer() {
+  if (buzzerMuted) return;
+  audioCtx.resume().then(() => {
+    [0, 0.35, 0.70].forEach(offset => {
+      const osc  = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.type = 'square';
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.5, audioCtx.currentTime + offset);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + offset + 0.28);
+      osc.start(audioCtx.currentTime + offset);
+      osc.stop(audioCtx.currentTime  + offset + 0.28);
+    });
+  });
 }
 
-let lastStatus = "SAFE";
-const alertBox   = document.getElementById("alertBox");
-const alertSound = document.getElementById("alertSound");
+// ── Browser notification ─────────────────────────────────────
+function sendNotification(title, body) {
+  if (notifMuted) return;
+  if (Notification.permission === 'granted') {
+    new Notification(title, {
+      body,
+      icon: 'https://cdn-icons-png.flaticon.com/512/2933/2933245.png',
+      badge: 'https://cdn-icons-png.flaticon.com/512/2933/2933245.png',
+      tag: 'aquasense-alert',   // replaces previous notification instead of stacking
+      renotify: true
+    });
+  }
+}
 
+// ── Toast ────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4000);
+}
+
+// ── State ────────────────────────────────────────────────────
+let buzzerMuted    = false;
+let notifMuted     = false;
+let isUnsafe       = false;
+let lastStatus     = null;
+let countdownSecs  = 0;
+let countdownTimer = null;
+
+// ── Toggle controls ──────────────────────────────────────────
+window.toggleBuzzer = function() {
+  buzzerMuted = !buzzerMuted;
+  const btn = document.getElementById('buzzerBtn');
+  btn.textContent = buzzerMuted ? '🔔 Unmute Buzzer' : '🔇 Mute Buzzer';
+  btn.className   = buzzerMuted ? 'ctrl-btn green'   : 'ctrl-btn red';
+  if (!buzzerMuted && isUnsafe) playBuzzer();
+};
+
+window.toggleNotif = function() {
+  notifMuted = !notifMuted;
+  const btn = document.getElementById('notifBtn');
+  btn.textContent = notifMuted ? '🔔 Unmute Notifications' : '🔕 Mute Notifications';
+  btn.className   = notifMuted ? 'ctrl-btn green'          : 'ctrl-btn blue';
+};
+
+window.testAlert = function() {
+  audioCtx.resume().then(() => {
+    buzzerMuted = false;
+    notifMuted  = false;
+    document.getElementById('buzzerBtn').textContent = '🔇 Mute Buzzer';
+    document.getElementById('buzzerBtn').className   = 'ctrl-btn red';
+    document.getElementById('notifBtn').textContent  = '🔕 Mute Notifications';
+    document.getElementById('notifBtn').className    = 'ctrl-btn blue';
+    playBuzzer();
+    sendNotification('🧪 AquaSense Test', 'Alert system is working!');
+    showToast('🧪 Test alert fired!');
+  });
+};
+
+// ── Notification permission ──────────────────────────────────
+window.requestNotifPermission = function() {
+  Notification.requestPermission().then(p => {
+    if (p === 'granted') {
+      document.getElementById('notifBanner').style.display = 'none';
+      showToast('✅ Notifications enabled!');
+    }
+  });
+};
+
+function checkNotifBanner() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    document.getElementById('notifBanner').style.display = 'block';
+  } else if (Notification.permission === 'granted') {
+    document.getElementById('notifBanner').style.display = 'none';
+  }
+}
+checkNotifBanner();
+
+// ── Countdown (repeat every 60s while unsafe) ────────────────
+function startCountdown() {
+  clearInterval(countdownTimer);
+  countdownSecs = 60;
+  const box = document.getElementById('countdownBox');
+  box.style.display = 'block';
+  document.getElementById('countdown').textContent = countdownSecs;
+
+  countdownTimer = setInterval(() => {
+    countdownSecs--;
+    document.getElementById('countdown').textContent = countdownSecs;
+    if (countdownSecs <= 0) {
+      if (isUnsafe) {
+        playBuzzer();
+        sendNotification('🚨 AquaSense Alert!', 'Water is still UNSAFE! Check your system.');
+        showToast('🚨 Water Quality still UNSAFE!');
+        startCountdown();
+      } else {
+        clearInterval(countdownTimer);
+        box.style.display = 'none';
+      }
+    }
+  }, 1000);
+}
+
+function stopCountdown() {
+  clearInterval(countdownTimer);
+  document.getElementById('countdownBox').style.display = 'none';
+}
+
+// ── Pie chart ────────────────────────────────────────────────
 const ctx = document.getElementById('pieChart').getContext('2d');
 const pieChart = new Chart(ctx, {
   type: 'pie',
@@ -105,47 +363,77 @@ const pieChart = new Chart(ctx, {
   }
 });
 
+// ── Firebase listener ────────────────────────────────────────
+const alertBox   = document.getElementById('alertBox');
+const reasonTags = document.getElementById('reasonTags');
+
 onValue(dataRef, (snapshot) => {
   const raw = snapshot.val();
   if (!raw) return;
 
-  // Handle BOTH structures:
-  // 1. Flat:   liveData = { temperature, ph, tds }         ← after PUT fix
-  // 2. Nested: liveData = { "-OmrY2az": {temperature...} } ← before PUT fix
+  // Handle flat or nested push-key structure
   let data;
   if (raw.temperature !== undefined) {
-    data = raw; // already flat
+    data = raw;
   } else {
-    // pick the LAST push-key entry (most recent)
     const entries = Object.values(raw);
     data = entries[entries.length - 1];
   }
-
   if (!data || data.temperature === undefined) return;
 
-  document.getElementById("temp").innerText = data.temperature + " °C";
-  document.getElementById("ph").innerText   = data.ph;
-  document.getElementById("tds").innerText  = data.tds + " ppm";
+  document.getElementById('temp').innerText = data.temperature + ' °C';
+  document.getElementById('ph').innerText   = data.ph;
+  document.getElementById('tds').innerText  = data.tds + ' ppm';
 
-  const isSafe =
-    data.ph          >= 6.5 && data.ph          <= 8.5 &&
-    data.tds         >= 50  && data.tds         <= 300 &&
-    data.temperature >= 20  && data.temperature <= 35;
+  // Per-parameter checks
+  const phOk   = data.ph          >= 6.5 && data.ph          <= 8.5;
+  const tdsOk  = data.tds         >= 50  && data.tds         <= 300;
+  const tempOk = data.temperature >= 20  && data.temperature <= 35;
+  const isSafeNow = phOk && tdsOk && tempOk;
 
-  if (isSafe) {
+  // Reason tags
+  reasonTags.innerHTML = '';
+  [
+    { label: `pH: ${data.ph}`,              ok: phOk   },
+    { label: `TDS: ${data.tds} ppm`,        ok: tdsOk  },
+    { label: `Temp: ${data.temperature}°C`, ok: tempOk },
+  ].forEach(({ label, ok }) => {
+    const t = document.createElement('span');
+    t.className   = 'tag ' + (ok ? 'good' : 'bad');
+    t.textContent = (ok ? '✅ ' : '⚠️ ') + label;
+    reasonTags.appendChild(t);
+  });
+
+  if (isSafeNow) {
     alertBox.className   = 'alert safe-alert';
     alertBox.textContent = '✅ Water Quality: SAFE';
     pieChart.data.datasets[0].data = [1, 0];
-    lastStatus = "SAFE";
+    isUnsafe = false;
+    stopCountdown();
+    if (lastStatus === 'UNSAFE') {
+      showToast('✅ Water quality back to SAFE');
+      sendNotification('✅ AquaSense', 'Water quality is back to SAFE.');
+    }
+    lastStatus = 'SAFE';
   } else {
     alertBox.className   = 'alert danger-alert';
     alertBox.textContent = '⚠️ Water Quality: UNSAFE';
     pieChart.data.datasets[0].data = [0, 1];
-    if (lastStatus === "SAFE" && Notification.permission === "granted") {
-      new Notification("🚨 AquaSense Alert!", { body: "Water quality is unsafe!" });
-      alertSound.play().catch(() => {});
+    isUnsafe = true;
+
+    if (lastStatus !== 'UNSAFE') {
+      // First time becoming unsafe — fire immediately
+      playBuzzer();
+      const reasons = [
+        !phOk   ? `pH=${data.ph}`              : null,
+        !tdsOk  ? `TDS=${data.tds}ppm`         : null,
+        !tempOk ? `Temp=${data.temperature}°C` : null,
+      ].filter(Boolean).join(', ');
+      sendNotification('🚨 AquaSense Alert!', `Water UNSAFE! ${reasons}`);
+      showToast(`🚨 UNSAFE! ${reasons}`);
+      startCountdown();
     }
-    lastStatus = "UNSAFE";
+    lastStatus = 'UNSAFE';
   }
   pieChart.update();
 });
