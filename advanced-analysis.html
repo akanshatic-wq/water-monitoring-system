@@ -79,18 +79,97 @@ const dataRef = ref(db, "liveData");
 let temps = [], phs = [], tdss = [], safeCount = 0;
 
 const ctx = document.getElementById('trendChart').getContext('2d');
+const gradTemp = ctx.createLinearGradient(0, 0, 0, 300);
+gradTemp.addColorStop(0, "rgba(79,195,247,0.5)");
+gradTemp.addColorStop(1, "rgba(79,195,247,0)");
+
+const gradPH = ctx.createLinearGradient(0, 0, 0, 300);
+gradPH.addColorStop(0, "rgba(255,92,138,0.5)");
+gradPH.addColorStop(1, "rgba(255,92,138,0)");
+
+const gradTDS = ctx.createLinearGradient(0, 0, 0, 300);
+gradTDS.addColorStop(0, "rgba(255,167,38,0.5)");
+gradTDS.addColorStop(1, "rgba(255,167,38,0)");
+
 const chart = new Chart(ctx, {
   type: 'line',
   data: {
     labels: [],
     datasets: [
-      { label: 'Temp', data: [] },
-      { label: 'pH', data: [] },
-      { label: 'TDS', data: [] }
+      {
+        label: 'Temperature',
+        data: [],
+        borderColor: '#4fc3f7',
+        backgroundColor: gradTemp,
+        fill: true,
+        tension: 0.4,
+        borderWidth: 2,
+        yAxisID: 'yTemp'
+      },
+      {
+        label: 'pH',
+        data: [],
+        borderColor: '#ff5c8a',
+        backgroundColor: gradPH,
+        fill: true,
+        tension: 0.4,
+        borderWidth: 2,
+        yAxisID: 'yPH'
+      },
+      {
+        label: 'TDS',
+        data: [],
+        borderColor: '#ffa726',
+        backgroundColor: gradTDS,
+        fill: true,
+        tension: 0.4,
+        borderWidth: 2,
+        yAxisID: 'yTDS'
+      }
     ]
+  },
+  options: {
+    responsive: true,
+    interaction: {
+      mode: 'index',
+      intersect: false
+    },
+    plugins: {
+      legend: {
+        labels: { color: 'white' }
+      }
+    },
+    elements: {
+      point: { radius: 0 }
+    },
+    scales: {
+      x: {
+        ticks: { color: 'white' },
+        grid: { color: 'rgba(255,255,255,0.05)' }
+      },
+      yTemp: {
+        type: 'linear',
+        position: 'left',
+        ticks: { color: '#4fc3f7' },
+        title: { display: true, text: 'Temp (°C)', color: '#4fc3f7' }
+      },
+      yTDS: {
+        type: 'linear',
+        position: 'right',
+        ticks: { color: '#ffa726' },
+        grid: { drawOnChartArea: false },
+        title: { display: true, text: 'TDS (ppm)', color: '#ffa726' }
+      },
+      yPH: {
+        type: 'linear',
+        position: 'right',
+        min: 0,
+        max: 14,
+        display: false
+      }
+    }
   }
 });
-
 onValue(dataRef, (snapshot) => {
   const raw = snapshot.val();
   if (!raw) return;
@@ -104,8 +183,12 @@ onValue(dataRef, (snapshot) => {
 
   chart.data.labels = [];
   chart.data.datasets.forEach(ds => ds.data = []);
+function reduceData(data, step = 5) {
+  return data.filter((_, i) => i % step === 0);
+}
 
-  entries.forEach((data, index) => {
+const reducedEntries = reduceData(entries);
+  reducedEntries.forEach((data, index) => {
     temps.push(data.temperature);
     phs.push(data.ph);
     tdss.push(data.tds);
@@ -129,7 +212,7 @@ onValue(dataRef, (snapshot) => {
   document.getElementById('avgPh').innerText   = avg(phs);
   document.getElementById('avgTds').innerText  = avg(tdss) + " ppm";
 
-  const safePercent = ((safeCount / entries.length) * 100).toFixed(1);
+  const safePercent = ((safeCount / reducedEntries.length) * 100).toFixed(1);
   document.getElementById('safePercent').innerText = safePercent + "%";
 
   chart.update();
