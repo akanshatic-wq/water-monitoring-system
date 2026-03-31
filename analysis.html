@@ -143,7 +143,7 @@ function renderCharts(entries) {
   });
 
   last30.forEach((entry, i) => {
-    const label = '#' + (entries.length - last30.length + i + 1);
+  const label = i + 1;
     tempChart.data.labels.push(label);
     tempChart.data.datasets[0].data.push(entry.temperature ?? null);
     phChart.data.labels.push(label);
