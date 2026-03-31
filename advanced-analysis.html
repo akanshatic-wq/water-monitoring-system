@@ -31,9 +31,16 @@
       font-size: 18px;
     }
 
-    canvas {
-      max-width: 90%;
-      margin: 20px auto;
+    /* BIG GRAPH */
+    .chart-container {
+      width: 95%;
+      height: 75vh;
+      margin: 30px auto;
+    }
+
+    .chart-container canvas {
+      width: 100% !important;
+      height: 100% !important;
     }
 
     .btn {
@@ -57,7 +64,9 @@
   <div class="card">Safe %: <span id="safePercent">--</span></div>
 </div>
 
-<canvas id="trendChart"></canvas>
+<div class="chart-container">
+  <canvas id="trendChart"></canvas>
+</div>
 
 <button class="btn" onclick="window.location.href='index.html'">⬅ Back</button>
 
@@ -76,18 +85,25 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const dataRef = ref(db, "liveData");
 
+/* ✅ move function OUTSIDE */
+function reduceData(data, step = 5) {
+  return data.filter((_, i) => i % step === 0);
+}
+
 let temps = [], phs = [], tdss = [], safeCount = 0;
 
 const ctx = document.getElementById('trendChart').getContext('2d');
-const gradTemp = ctx.createLinearGradient(0, 0, 0, 300);
+
+/* gradients */
+const gradTemp = ctx.createLinearGradient(0, 0, 0, 400);
 gradTemp.addColorStop(0, "rgba(79,195,247,0.5)");
 gradTemp.addColorStop(1, "rgba(79,195,247,0)");
 
-const gradPH = ctx.createLinearGradient(0, 0, 0, 300);
+const gradPH = ctx.createLinearGradient(0, 0, 0, 400);
 gradPH.addColorStop(0, "rgba(255,92,138,0.5)");
 gradPH.addColorStop(1, "rgba(255,92,138,0)");
 
-const gradTDS = ctx.createLinearGradient(0, 0, 0, 300);
+const gradTDS = ctx.createLinearGradient(0, 0, 0, 400);
 gradTDS.addColorStop(0, "rgba(255,167,38,0.5)");
 gradTDS.addColorStop(1, "rgba(255,167,38,0)");
 
@@ -97,7 +113,7 @@ const chart = new Chart(ctx, {
     labels: [],
     datasets: [
       {
-        label: 'Temperature',
+        label: 'Temperature (°C)',
         data: [],
         borderColor: '#4fc3f7',
         backgroundColor: gradTemp,
@@ -117,7 +133,7 @@ const chart = new Chart(ctx, {
         yAxisID: 'yPH'
       },
       {
-        label: 'TDS',
+        label: 'TDS (ppm)',
         data: [],
         borderColor: '#ffa726',
         backgroundColor: gradTDS,
@@ -130,6 +146,7 @@ const chart = new Chart(ctx, {
   },
   options: {
     responsive: true,
+    maintainAspectRatio: false,
     interaction: {
       mode: 'index',
       intersect: false
@@ -170,11 +187,13 @@ const chart = new Chart(ctx, {
     }
   }
 });
+
 onValue(dataRef, (snapshot) => {
   const raw = snapshot.val();
   if (!raw) return;
 
   const entries = Object.values(raw);
+  const reducedEntries = reduceData(entries, 5);
 
   temps = [];
   phs = [];
@@ -183,11 +202,7 @@ onValue(dataRef, (snapshot) => {
 
   chart.data.labels = [];
   chart.data.datasets.forEach(ds => ds.data = []);
-function reduceData(data, step = 5) {
-  return data.filter((_, i) => i % step === 0);
-}
 
-const reducedEntries = reduceData(entries);
   reducedEntries.forEach((data, index) => {
     temps.push(data.temperature);
     phs.push(data.ph);
