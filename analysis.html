@@ -53,12 +53,35 @@
     }
     .chart-card h2 { font-size: 18px; margin-bottom: 16px; color: cyan; }
     .chart-wrap { position: relative; width: 100%; height: 240px; }
+
+    .filter-row {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 0 auto 20px;
+    }
+    .filter-btn {
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.1);
+      color: white;
+      cursor: pointer;
+      font-size: 13px;
+      transition: 0.2s;
+    }
+    .filter-btn.active, .filter-btn:hover {
+      background: cyan;
+      color: #000;
+      border-color: cyan;
+    }
   </style>
 </head>
 <body>
 
 <h1>📊 Water Quality Analysis</h1>
-<a href="index.html">⬅ Back to Dashboard</a>
+<a href="/">⬅ Back to Dashboard</a>
 
 <div id="statusMsg">⏳ Loading data...</div>
 
@@ -67,6 +90,14 @@
   <div class="stat-card"><div class="label">Latest pH</div><div class="value" id="statPh">--</div></div>
   <div class="stat-card"><div class="label">Latest TDS</div><div class="value" id="statTds">--</div></div>
   <div class="stat-card"><div class="label">Total Readings</div><div class="value" id="statCount">--</div></div>
+  <div class="stat-card"><div class="label">Safe %</div><div class="value" id="statSafe">--</div></div>
+</div>
+
+<div class="filter-row">
+  <button class="filter-btn active" onclick="setFilter(30,  this)">Last 30</button>
+  <button class="filter-btn"        onclick="setFilter(100, this)">Last 100</button>
+  <button class="filter-btn"        onclick="setFilter(200, this)">Last 200</button>
+  <button class="filter-btn"        onclick="setFilter(0,   this)">All</button>
 </div>
 
 <div class="chart-card">
@@ -86,7 +117,9 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getDatabase, ref, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+import {
+  getDatabase, ref, onValue, push
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyDj5OOnk-e5hRRPCOUnjARLSd1TnoaQIO8",
@@ -99,10 +132,30 @@ const firebaseConfig = {
 };
 
 const app      = initializeApp(firebaseConfig);
-const database = getDatabase(app);
+const db       = getDatabase(app);
+const histRef  = ref(db, "history");
+const liveRef  = ref(db, "liveData");
 const statusMsg = document.getElementById('statusMsg');
 
-function makeChart(id, label, color) {
+// ── Save every live reading into /history ────────────────────
+let lastUptime = -1;
+onValue(liveRef, (snap) => {
+  const d = snap.val();
+  if (!d || d.temperature === undefined) return;
+  // Only push if it's a new reading (uptime changed)
+  if (d.uptime === lastUptime) return;
+  lastUptime = d.uptime;
+  push(histRef, {
+    temperature: d.temperature,
+    ph:          d.ph,
+    tds:         d.tds,
+    danger:      d.danger || false,
+    ts:          Date.now()
+  });
+});
+
+// ── Charts ───────────────────────────────────────────────────
+function makeChart(id, label, color, minY, maxY) {
   return new Chart(document.getElementById(id), {
     type: 'line',
     data: {
@@ -111,7 +164,7 @@ function makeChart(id, label, color) {
         label,
         data: [],
         borderColor: color,
-        backgroundColor: color + '22',
+        backgroundColor: color + '33',
         fill: true,
         tension: 0.4,
         pointRadius: 2,
@@ -123,90 +176,115 @@ function makeChart(id, label, color) {
       maintainAspectRatio: false,
       plugins: { legend: { labels: { color: 'white' } } },
       scales: {
-        x: { ticks: { color: 'rgba(255,255,255,0.5)', maxRotation: 45, autoSkip: true, maxTicksLimit: 12 }, grid: { color: 'rgba(255,255,255,0.05)' } },
-        y: { ticks: { color: 'rgba(255,255,255,0.6)' }, grid: { color: 'rgba(255,255,255,0.1)' } }
+        x: {
+          ticks: {
+            color: 'rgba(255,255,255,0.5)',
+            maxRotation: 45,
+            autoSkip: true,
+            maxTicksLimit: 12
+          },
+          grid: { color: 'rgba(255,255,255,0.05)' }
+        },
+        y: {
+          min: minY,
+          max: maxY,
+          ticks: { color: 'rgba(255,255,255,0.6)' },
+          grid: { color: 'rgba(255,255,255,0.1)' }
+        }
       }
     }
   });
 }
 
-const tempChart = makeChart('tempChart', 'Temperature (°C)', '#ff6d00');
-const phChart   = makeChart('phChart',   'pH',               '#00e676');
-const tdsChart  = makeChart('tdsChart',  'TDS (ppm)',        '#00e5ff');
+const tempChart = makeChart('tempChart', 'Temperature (°C)', '#ff6d00', 0,   50);
+const phChart   = makeChart('phChart',   'pH',               '#00e676', 0,   14);
+const tdsChart  = makeChart('tdsChart',  'TDS (ppm)',        '#00e5ff', 0, 1000);
 
-function renderCharts(entries) {
-  const last30 = entries.slice(-30); // show last 30 readings
+// ── Filter ───────────────────────────────────────────────────
+let allEntries  = [];
+let filterCount = 30;
+
+window.setFilter = function(n, btn) {
+  filterCount = n;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCharts();
+};
+
+function renderCharts() {
+  const entries = filterCount === 0
+    ? allEntries
+    : allEntries.slice(-filterCount);
+
+  if (entries.length === 0) {
+    statusMsg.textContent = '⚠️ No history yet — keep ESP32 running, data will appear here.';
+    statusMsg.style.background = 'rgba(255,160,0,0.2)';
+    return;
+  }
 
   [tempChart, phChart, tdsChart].forEach(c => {
     c.data.labels = [];
     c.data.datasets[0].data = [];
   });
 
-  last30.forEach((entry, i) => {
-  const label = i + 1;
+  let safeCount = 0;
+
+  entries.forEach((entry) => {
+    const label = entry.ts
+      ? new Date(entry.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : '#';
+
     tempChart.data.labels.push(label);
-    tempChart.data.datasets[0].data.push(entry.temperature ?? null);
+    tempChart.data.datasets[0].data.push(
+      entry.temperature !== undefined ? +entry.temperature.toFixed(1) : null
+    );
+
     phChart.data.labels.push(label);
-    phChart.data.datasets[0].data.push(entry.ph ?? null);
+    phChart.data.datasets[0].data.push(
+      entry.ph !== undefined ? +entry.ph.toFixed(2) : null
+    );
+
     tdsChart.data.labels.push(label);
-    tdsChart.data.datasets[0].data.push(entry.tds ?? null);
+    tdsChart.data.datasets[0].data.push(
+      entry.tds !== undefined ? Math.round(entry.tds) : null
+    );
+
+    const safe =
+      entry.ph >= 6.5 && entry.ph <= 8.5 &&
+      entry.tds >= 50 && entry.tds <= 300 &&
+      entry.temperature >= 20 && entry.temperature <= 35;
+    if (safe) safeCount++;
   });
 
   [tempChart, phChart, tdsChart].forEach(c => c.update());
 
-  const latest = last30[last30.length - 1];
-  if (latest) {
-    document.getElementById('statTemp').textContent  = (latest.temperature ?? '--') + ' °C';
-    document.getElementById('statPh').textContent    =  latest.ph          ?? '--';
-    document.getElementById('statTds').textContent   = (latest.tds         ?? '--') + ' ppm';
-    document.getElementById('statCount').textContent =  entries.length;
-  }
+  const latest = entries[entries.length - 1];
+  document.getElementById('statTemp').textContent  = latest.temperature?.toFixed(1) + ' °C';
+  document.getElementById('statPh').textContent    = latest.ph?.toFixed(2);
+  document.getElementById('statTds').textContent   = Math.round(latest.tds) + ' ppm';
+  document.getElementById('statCount').textContent = allEntries.length;
+  document.getElementById('statSafe').textContent  =
+    ((safeCount / entries.length) * 100).toFixed(1) + '%';
+
+  statusMsg.textContent =
+    '✅ Showing ' + entries.length + ' of ' + allEntries.length + ' readings — live';
+  statusMsg.style.background = 'rgba(0,200,83,0.15)';
 }
 
-// ── Try /history first ──────────────────────────────────────
-const historyRef  = ref(database, 'history');
-const liveDataRef = ref(database, 'liveData');
-
-onValue(historyRef, (snapshot) => {
-  const histData = snapshot.val();
-
-  if (histData && typeof histData === 'object') {
-    const entries = Object.values(histData);
-    if (entries.length > 0 && entries[0].temperature !== undefined) {
-      statusMsg.textContent = '✅ History data — ' + entries.length + ' readings';
-      statusMsg.style.background = 'rgba(0,200,83,0.2)';
-      renderCharts(entries);
-      return;
-    }
+// ── Listen to history (live updates) ─────────────────────────
+onValue(histRef, (snap) => {
+  const raw = snap.val();
+  if (!raw) {
+    statusMsg.textContent =
+      '⏳ No history yet. ESP32 must send at least one reading first.';
+    statusMsg.style.background = 'rgba(255,160,0,0.2)';
+    return;
   }
-
-  // ── Fallback: use liveData push keys as history ─────────────
-  // Your ESP32 was POSTing to liveData, so all history is there!
-  onValue(liveDataRef, (snap) => {
-    const raw = snap.val();
-    if (!raw) {
-      statusMsg.textContent = '❌ No data found. Make sure ESP32 is running.';
-      statusMsg.style.background = 'rgba(213,0,0,0.2)';
-      return;
-    }
-
-    // Check if liveData has push-key history entries
-    const firstVal = Object.values(raw)[0];
-    if (typeof firstVal === 'object' && firstVal.temperature !== undefined) {
-      // liveData contains history (push keys) — use it!
-      const entries = Object.values(raw);
-      statusMsg.textContent = '📦 Using liveData history — ' + entries.length + ' readings (move ESP32 to POST /history for future)';
-      statusMsg.style.background = 'rgba(255,160,0,0.2)';
-      renderCharts(entries);
-    } else if (raw.temperature !== undefined) {
-      // liveData is flat — only 1 reading available
-      statusMsg.textContent = '⚠️ Only 1 live reading available. History will build up over time.';
-      statusMsg.style.background = 'rgba(255,160,0,0.2)';
-      renderCharts([raw]);
-    }
-  }, { onlyOnce: true });
-
-}, { onlyOnce: true });
+  allEntries = Object.values(raw)
+    .filter(e => e && e.temperature !== undefined)
+    .sort((a, b) => (a.ts || 0) - (b.ts || 0));
+  renderCharts();
+});
 </script>
 </body>
 </html>
